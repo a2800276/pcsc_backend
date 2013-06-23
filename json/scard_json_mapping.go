@@ -31,14 +31,11 @@ type ScardContextResponse struct {
 	Ctx string `json:"ctx"`
 }
 
-type ScardReleaseRequest struct {
+type ScardCtxRequest struct {
 	ScardRequest
 	Ctx string `json:"ctx"`
 }
 
-type ScardValidRequest struct {
-	ScardReleaseRequest
-}
 
 func decodeFully(r io.Reader, into interface{}) (err error) {
 	decoder := json.NewDecoder(r)
@@ -90,7 +87,8 @@ func ScardJson(r io.Reader, w io.Writer) (err error) {
 	}
 }
 
-func ScardVersion(r io.Reader, w io.Writer) (err error) {
+type scardFunc func(r io.Reader, w io.Writer)(err error)
+func scardTemplate(method string, f scardFunc, r io.Reader, w io.Writer)(err error){
 	req := ScardRequest{}
 
 	if err = decodeFully(r, &req); err != nil {
@@ -98,29 +96,30 @@ func ScardVersion(r io.Reader, w io.Writer) (err error) {
 	}
 
 	switch req.Method {
-	case "version":
+	case method:
+		return f(r,w)
+	default:
+		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
+	}
+}
+
+func ScardVersion(r io.Reader, w io.Writer) (err error) {
+	f := func(r io.Reader, w io.Writer)(err error){
 		res := ScardVersionResponse{}
 		res.Error = "0"
 		res.Version = scard.Version()
 		encoder := json.NewEncoder(w)
 		return encoder.Encode(res)
-	default:
-		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
 	}
-
+	return scardTemplate("version", f, r, w)
 }
 
 var contexts = make(map[string]*scard.Context)
 
 func ScardEstablishContext(r io.Reader, w io.Writer) (err error) {
-	req := ScardRequest{}
 
-	if err = decodeFully(r, &req); err != nil {
-		return
-	}
 
-	switch req.Method {
-	case "establishContext":
+	f := func(r io.Reader, w io.Writer)(err error){
 		if ctx, serr := scard.EstablishContext(); serr != nil {
 			return encodeError(serr.Error(), w)
 		} else {
@@ -134,53 +133,50 @@ func ScardEstablishContext(r io.Reader, w io.Writer) (err error) {
 			encoder := json.NewEncoder(w)
 			return encoder.Encode(res)
 		}
-	default:
-		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
 	}
+	return scardTemplate("establishContext", f, r, w)
 
 }
 
-func ScardReleaseContext(r io.Reader, w io.Writer) (err error) {
-	req := ScardReleaseRequest{}
+type scardCtxFunc func(ctx string, r io.Reader, w io.Writer)(err error)
+func scardCtxTemplate(method string, f scardCtxFunc, r io.Reader, w io.Writer)(err error){
+	req := ScardCtxRequest{}
 
 	if err = decodeFully(r, &req); err != nil {
 		return
 	}
 
 	switch req.Method {
-	case "releaseContext":
-		ctx := contexts[req.Ctx]
-		if ctx == nil {
+	case method:
+		return f(req.Ctx, r,w)
+	default:
+		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
+	}
+}
+func ScardReleaseContext(r io.Reader, w io.Writer) (err error) {
+	f := func(ctx string, r io.Reader, w io.Writer)(err error){
+		scard_ctx := contexts[ctx]
+		if scard_ctx == nil {
 			return encodeError("unknown ctx", w)
 		}
-		if err = ctx.Release(); err != nil {
+		if err = scard_ctx.Release(); err != nil {
 			return encodeError(err.Error(), w)
 		} else {
-			contexts[req.Ctx] = nil
+			contexts[ctx] = nil
 			resp := ScardResponse{"0"}
 			encoder := json.NewEncoder(w)
 			return encoder.Encode(resp)
-
 		}
-	default:
-		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
 	}
-
+	return scardCtxTemplate("releaseContext", f, r, w)
 }
 func ScardIsValid(r io.Reader, w io.Writer) (err error) {
-	req := ScardValidRequest{}
-
-	if err = decodeFully(r, &req); err != nil {
-		return
-	}
-
-	switch req.Method {
-	case "isValid":
-		ctx := contexts[req.Ctx]
-		if ctx == nil {
+	f := func(ctx string, r io.Reader, w io.Writer)(err error){
+		scard_ctx := contexts[ctx]
+		if scard_ctx == nil {
 			return encodeError("unknown ctx", w)
 		}
-		if valid, err2 := ctx.IsValid(); err != nil {
+		if valid, err2 := scard_ctx.IsValid(); err != nil {
 			return encodeError(err2.Error(), w)
 		} else {
 			if !valid {
@@ -189,10 +185,8 @@ func ScardIsValid(r io.Reader, w io.Writer) (err error) {
 				return encodeError("0", w)
 			}
 		}
-	default:
-		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
 	}
-
+	return scardCtxTemplate("isValid", f, r, w)
 }
 
 // // cancel
