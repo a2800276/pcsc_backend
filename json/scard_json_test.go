@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+import "github.com/ebfe/go.pcsclite/scard"
+
 func TestVersion(t *testing.T) {
 	req := `{
 	"method": "version"
@@ -159,7 +161,7 @@ func TestListReaders(t *testing.T) {
 	writer := &bytes.Buffer{}
 
 	if err := ScardJson(reader, writer); err != nil {
-		t.Fail()
+		t.Fatal(err)
 	} else {
 		resp := ScardListReadersResponse{}
 		if err = decodeFully(writer, &resp); err != nil {
@@ -194,4 +196,161 @@ func TestListReaders(t *testing.T) {
 		}
 	}
 
+}
+
+
+func TestConnect(t *testing.T) {
+	var reader string
+	if ctx, err := scard.EstablishContext(); err != nil {
+		t.Fatal(err)
+	} else {
+		defer ctx.Release()
+		if rdrs, err := ctx.ListReaders(); err != nil {
+			t.Fatal(err)
+		} else {
+			contexts["123"] = ctx
+			reader = rdrs[0]
+		}
+	}
+
+	req := `{
+		"method":"connect",
+		"ctx": "123",
+		"reader": "%s",
+		"shareMode": "EXCLUSIVE",
+		"protocol": "ANY"
+	}`
+
+	req = fmt.Sprintf(req, reader)
+	rder := strings.NewReader(req)
+	writer := &bytes.Buffer{}
+
+	if err := ScardJson(rder, writer); err != nil {
+		t.Fatal(err)
+	} else {
+		resp := ScardConnectResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fatal(err)
+		} else {
+			if resp.Error != "0" {
+				t.Logf("unexpected error: %s", resp.Error)
+				t.FailNow()
+			}
+			t.Logf("card: %s\n", resp.Card)
+			if cards[resp.Card] == nil {
+				t.Error("card not in server")
+			}
+			cards[resp.Card].Disconnect(scard.UNPOWER_CARD)
+			cards[resp.Card] = nil
+		}
+	}
+
+}
+
+
+func TestStatus(t *testing.T) {
+	var reader string
+	if ctx, err := scard.EstablishContext(); err != nil {
+		t.Fatal(err)
+	} else {
+		defer ctx.Release()
+		if rdrs, err := ctx.ListReaders(); err != nil {
+			t.Fatal(err)
+		} else {
+			contexts["123"] = ctx
+			reader = rdrs[0]
+		}
+	}
+
+	var card *scard.Card
+	var err error
+	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+		t.Fatal(err)
+	}
+
+	cards[Card("123")] = card
+		req := `{
+			"method":"status",
+			"card":"123"
+		}`
+	
+	req = fmt.Sprintf(req, reader)
+	rder := strings.NewReader(req)
+	writer := &bytes.Buffer{}
+
+	if err := ScardJson(rder, writer); err != nil {
+		t.Fatal(err)
+	} else {
+		resp := ScardStatusResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fatal(err)
+		} else {
+			if resp.Error != "0" {
+				t.Logf("unexpected error: %s", resp.Error)
+				t.FailNow()
+			}
+			t.Logf("card: %s\n", resp.Card)
+			t.Logf("reader: %s (%s)\n", resp.Reader, reader)
+			t.Logf("state: %s\n", resp.State)
+			t.Logf("proto: %s\n", resp.ActiveProtocol)
+			t.Logf("atr: %s\n", resp.ATR)
+
+			if cards[resp.Card] == nil {
+				t.Error("card not in server")
+			}
+			cards[resp.Card].Disconnect(scard.UNPOWER_CARD)
+			cards[resp.Card] = nil
+		}
+	}
+
+}
+
+
+func TestDisconnect(t *testing.T) {
+	var reader string
+	if ctx, err := scard.EstablishContext(); err != nil {
+		t.Fatal(err)
+	} else {
+		defer ctx.Release()
+		if rdrs, err := ctx.ListReaders(); err != nil {
+			t.Fatal(err)
+		} else {
+			contexts["123"] = ctx
+			reader = rdrs[0]
+		}
+	}
+
+	var card *scard.Card
+	var err error
+	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+		t.Fatal(err)
+	}
+
+	cards[Card("123")] = card
+
+	req := `{
+		"method":"disconnect",
+		"card":"123",
+		"disposition":"UNPOWER_CARD"
+	}`
+
+	req = fmt.Sprintf(req, reader)
+	rder := strings.NewReader(req)
+	writer := &bytes.Buffer{}
+
+	if err := ScardJson(rder, writer); err != nil {
+		t.Fatal(err)
+	} else {
+		resp := ScardResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fatal(err)
+		} else {
+			if resp.Error != "0" {
+				t.Fatalf("unexpected error: %s", resp.Error)
+			}
+			if cards["123"] != nil {
+				t.Fatal("card still in server")
+			}
+		}
+	}
 }
