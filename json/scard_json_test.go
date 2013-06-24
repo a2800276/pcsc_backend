@@ -38,7 +38,7 @@ func TestCtx(t *testing.T) {
 	}
 }
 
-func getContext() (c string, err error) {
+func getContext() (c Context, err error) {
 
 	req := `{
 	"method": "establishContext"
@@ -57,7 +57,7 @@ func getContext() (c string, err error) {
 	}
 }
 func TestRelease(t *testing.T) {
-	var ctx string
+	var ctx Context
 	var err error
 
 	if ctx, err = getContext(); err != nil {
@@ -96,7 +96,7 @@ func TestValid(t *testing.T) {
 	"ctx": "%s"
 	}`
 
-	var ctx string
+	var ctx Context
 	var err error
 
 	if ctx, err = getContext(); err != nil {
@@ -117,6 +117,61 @@ func TestValid(t *testing.T) {
 			if resp.Error != "0" {
 				t.Logf("unexpected error: %s", resp.Error)
 				t.FailNow()
+			}
+		}
+	}
+	contexts[ctx].Release()
+	// check again with released context
+
+	reader = strings.NewReader(req)
+	writer = &bytes.Buffer{}
+	if err := ScardJson(reader, writer); err != nil {
+		t.Fail()
+	} else {
+		resp := ScardResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fail()
+		} else {
+			if resp.Error != "INVALID_HANDLE" {
+				t.Logf("unexpected error: %s", resp.Error)
+				t.FailNow()
+			}
+		}
+	}
+
+}
+
+func TestListReaders(t *testing.T) {
+	req := `{
+	"method": "listReaders",
+	"ctx": "%s"
+	}`
+
+	var ctx Context
+	var err error
+
+	if ctx, err = getContext(); err != nil {
+		t.Errorf("couldn't get initial ctx: %s", err.Error())
+	}
+
+	req = fmt.Sprintf(req, ctx)
+	reader := strings.NewReader(req)
+	writer := &bytes.Buffer{}
+
+	if err := ScardJson(reader, writer); err != nil {
+		t.Fail()
+	} else {
+		resp := ScardListReadersResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fail()
+		} else {
+			if resp.Error != "0" {
+				t.Logf("unexpected error: %s", resp.Error)
+				t.FailNow()
+			}
+			t.Logf("found %d readers\n", len(resp.Readers))
+			for _, rdr := range resp.Readers {
+				t.Logf("reader: %s\n", rdr)
 			}
 		}
 	}
