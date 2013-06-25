@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"encoding/hex"
 )
 
 import "github.com/ebfe/go.pcsclite/scard"
@@ -353,4 +354,61 @@ func TestDisconnect(t *testing.T) {
 			}
 		}
 	}
+}
+
+
+func TestTransmit(t *testing.T) {
+	var reader string
+	if ctx, err := scard.EstablishContext(); err != nil {
+		t.Fatal(err)
+	} else {
+		defer ctx.Release()
+		if rdrs, err := ctx.ListReaders(); err != nil {
+			t.Fatal(err)
+		} else {
+			contexts["123"] = ctx
+			reader = rdrs[0]
+		}
+	}
+
+	var card *scard.Card
+	var err error
+	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+		t.Fatal(err)
+	}
+
+	cards[Card("123")] = card
+	defer card.Disconnect(scard.UNPOWER_CARD)
+
+	// use any old credit card to test
+	pse := []byte("1PAY.SYS.DDF01")
+	select_apdu := append([]byte{ 0x00, 0xA4, 0xA4, 0x00, 0x03, 0x0e}, pse ...)
+
+	apdu := hex.EncodeToString(select_apdu)
+
+	req := `{
+		"method":"transmit",
+		"card":"123",
+		"data":"%s"
+	}`
+
+	req = fmt.Sprintf(req, apdu)
+	rder := strings.NewReader(req)
+	writer := &bytes.Buffer{}
+
+	if err := ScardJson(rder, writer); err != nil {
+		t.Fatal(err)
+	} else {
+		resp := ScardTransmitResponse{}
+		if err = decodeFully(writer, &resp); err != nil {
+			t.Fatal(err)
+		} else {
+			if resp.Error != "0" {
+				t.Fatalf("unexpected error: %s", resp.Error)
+			}
+			t.Logf(	"response: %s", resp.Data )
+		}
+	}
+	contexts["123"] = nil
+	cards[Card("123")] = nil
 }
