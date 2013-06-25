@@ -16,7 +16,7 @@ const (
 	PROTOCOL_ANY       Protocol = "ANY"
 )
 
-func ProtocolFromScard(p scard.Protocol)Protocol{
+func ProtocolFromScard(p scard.Protocol) Protocol {
 	switch p {
 	case scard.PROTOCOL_T0:
 		return PROTOCOL_T0

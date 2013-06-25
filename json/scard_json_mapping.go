@@ -67,6 +67,9 @@ func ScardJson(r io.Reader, w io.Writer) (err error) {
 		return ScardStatus(buffer2, w)
 	case "disconnect":
 		return ScardDisconnect(buffer2, w)
+	case "transmit":
+		return ScardTransmit(buffer2, w)
+
 	default:
 		return encodeError(fmt.Sprintf("unknown method: %s", message.Method), w)
 	}
@@ -184,7 +187,7 @@ func checkContext(ctx *scard.Context, w io.Writer) (valid bool, err error) {
 	if valid, err = ctx.IsValid(); err != nil {
 		return false, encodeError(err.Error(), w)
 	} else if !valid {
-		return false, encodeError("INVALID_HANDLE",w)
+		return false, encodeError("INVALID_HANDLE", w)
 	}
 	return
 }
@@ -302,22 +305,59 @@ func ScardDisconnect(r io.Reader, w io.Writer) (err error) {
 		if !req.Disposition.OK() {
 			return encodeError("INCORRECT_PARAM", w)
 		}
-		var card *scard.Card 
+		var card *scard.Card
 		if card, err = checkCard(req.Card, w); card == nil {
 			return
 		}
-		if err = card.Disconnect(req.Disposition.Scard()); err!= nil {
+		if err = card.Disconnect(req.Disposition.Scard()); err != nil {
 			return encodeError(err.Error(), w)
 		}
 		cards[req.Card] = nil
 		resp := ScardResponse{}
-		resp.Error="0"
-		encoder:= json.NewEncoder(w)
-		return encoder.Encode(resp) 
+		resp.Error = "0"
+		encoder := json.NewEncoder(w)
+		return encoder.Encode(resp)
 	default:
 		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
 	}
 }
+
+func ScardTransmit(r io.Reader, w io.Writer) (err error) {
+	req := ScardTransmitRequest{}
+
+	if err = decodeFully(r, &req); err != nil {
+		return
+	}
+
+	switch req.Method {
+	case "transmit":
+		if req.Data == "" {
+			return encodeError("INCORRECT_PARAM", w)
+		}
+
+		println(req.Data)
+
+		var card *scard.Card
+		if card, err = checkCard(req.Card, w); card == nil {
+			return
+		}
+		var data []byte
+		if data, err = hex.DecodeString(req.Data); err != nil {
+			return encodeError(err.Error(), w)
+		}
+		if data, err = card.Transmit(data); err != nil {
+			return encodeError(err.Error(), w)
+		}
+		resp := ScardTransmitResponse{}
+		resp.Error = "0"
+		resp.Data = hex.EncodeToString(data)
+		encoder := json.NewEncoder(w)
+		return encoder.Encode(resp)
+	default:
+		return encodeError(fmt.Sprintf("incorrect method: %s", req.Method), w)
+	}
+}
+
 // // cancel
 // // reconnect
 // {}

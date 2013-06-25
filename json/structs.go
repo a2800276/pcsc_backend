@@ -30,7 +30,7 @@ type ScardListReadersResponse struct {
 
 type ScardConnectRequest struct {
 	ScardRequest
-	Ctx Context					`json:"ctx"`
+	Ctx       Context   `json:"ctx"`
 	Reader    string    `json:"reader"`
 	ShareMode ShareMode `json:"shareMode"`
 	Protocol  Protocol  `json:"protocol"`
@@ -50,25 +50,25 @@ type ScardStatusResponse struct {
 	ScardResponse
 	Card           Card     `json:"card"`
 	Reader         string   `json:"reader"`
-	State          uint32    `json:"state"`
+	State          uint32   `json:"state"`
 	ActiveProtocol Protocol `json:"activeProtocol"`
 	ATR            string   `json:"atr"`
 }
 
 type ScardDisconnectRequest struct {
 	ScardRequest
-	Card Card `json:"card"`
+	Card        Card        `json:"card"`
 	Disposition Disposition `json:"disposition"`
 }
 
 type ScardTransmitRequest struct {
 	ScardRequest
-	Card Card `json:"card"`
+	Card Card   `json:"card"`
 	Data string `json:"data"`
 }
 
 type ScardTransmitResponse struct {
 	ScardResponse
-	Card           Card     `json:"card"`
+	Card Card   `json:"card"`
 	Data string `json:"data"`
-	}
+}

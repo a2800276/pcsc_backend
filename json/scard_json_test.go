@@ -2,10 +2,10 @@ package json
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
-	"encoding/hex"
 )
 
 import "github.com/ebfe/go.pcsclite/scard"
@@ -199,7 +199,6 @@ func TestListReaders(t *testing.T) {
 
 }
 
-
 func TestConnect(t *testing.T) {
 	var reader string
 	if ctx, err := scard.EstablishContext(); err != nil {
@@ -241,13 +240,15 @@ func TestConnect(t *testing.T) {
 			if cards[resp.Card] == nil {
 				t.Error("card not in server")
 			}
-			cards[resp.Card].Disconnect(scard.UNPOWER_CARD)
+			if err = cards[resp.Card].Disconnect(scard.UNPOWER_CARD); err != nil {
+				t.Fatal(err)
+			} else {
+			}
 			cards[resp.Card] = nil
 		}
 	}
 
 }
-
 
 func TestStatus(t *testing.T) {
 	var reader string
@@ -265,16 +266,16 @@ func TestStatus(t *testing.T) {
 
 	var card *scard.Card
 	var err error
-	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+	if card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
 		t.Fatal(err)
 	}
 
 	cards[Card("123")] = card
-		req := `{
+	req := `{
 			"method":"status",
 			"card":"123"
 		}`
-	
+
 	req = fmt.Sprintf(req, reader)
 	rder := strings.NewReader(req)
 	writer := &bytes.Buffer{}
@@ -306,7 +307,6 @@ func TestStatus(t *testing.T) {
 
 }
 
-
 func TestDisconnect(t *testing.T) {
 	var reader string
 	if ctx, err := scard.EstablishContext(); err != nil {
@@ -323,7 +323,7 @@ func TestDisconnect(t *testing.T) {
 
 	var card *scard.Card
 	var err error
-	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+	if card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
 		t.Fatal(err)
 	}
 
@@ -356,7 +356,6 @@ func TestDisconnect(t *testing.T) {
 	}
 }
 
-
 func TestTransmit(t *testing.T) {
 	var reader string
 	if ctx, err := scard.EstablishContext(); err != nil {
@@ -373,16 +372,21 @@ func TestTransmit(t *testing.T) {
 
 	var card *scard.Card
 	var err error
-	if  card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
+	if card, err = contexts["123"].Connect(reader, scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY); err != nil {
 		t.Fatal(err)
 	}
-
+	// currently stupid workaround so SCM SCR 3310 will work
+	// it seems to me that this reader expects the card to be reinserted...
+	// Disconnecting the card with disposition = reset won't work.
+	if err = card.Reconnect(scard.SHARE_EXCLUSIVE, scard.PROTOCOL_ANY, scard.RESET_CARD); err != nil {
+		t.Fatal(err)
+	}
 	cards[Card("123")] = card
 	defer card.Disconnect(scard.UNPOWER_CARD)
 
 	// use any old credit card to test
-	pse := []byte("1PAY.SYS.DDF01")
-	select_apdu := append([]byte{ 0x00, 0xA4, 0xA4, 0x00, 0x03, 0x0e}, pse ...)
+	pse := []byte("1PAY.SYS.DDF01\x00")
+	select_apdu := append([]byte{0x00, 0xA4, 0x04, 0x00, 0x0e}, pse...)
 
 	apdu := hex.EncodeToString(select_apdu)
 
@@ -395,7 +399,9 @@ func TestTransmit(t *testing.T) {
 	req = fmt.Sprintf(req, apdu)
 	rder := strings.NewReader(req)
 	writer := &bytes.Buffer{}
-
+	if err = card.BeginTransaction(); err != nil {
+		t.Fatal(err)
+	}
 	if err := ScardJson(rder, writer); err != nil {
 		t.Fatal(err)
 	} else {
@@ -406,8 +412,11 @@ func TestTransmit(t *testing.T) {
 			if resp.Error != "0" {
 				t.Fatalf("unexpected error: %s", resp.Error)
 			}
-			t.Logf(	"response: %s", resp.Data )
+			t.Logf("response: %s", resp.Data)
 		}
+	}
+	if err = card.EndTransaction(scard.LEAVE_CARD); err != nil {
+		t.Fatal(err)
 	}
 	contexts["123"] = nil
 	cards[Card("123")] = nil
