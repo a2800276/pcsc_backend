@@ -1,0 +1,19 @@
+<html>
+  <head>
+    <script type="text/javascript">
+        var bridge;
+        function load() {
+            bridge =  document.getElementById('pcscbridge');
+            bridge.init();
+        }
+    </script>
+  </head>
+    <body onload="load()">
+        <object id="pcscbridge" type="application/x-pcscbridge" width="0" height="0">
+            <param name="onload" value="pluginLoaded" />
+        </object><br />
+
+        <!-- INSERT HTML CODE -->
+
+    </body>
+</html>
